@@ -1,6 +1,7 @@
 use cddl::ast::*;
 use either::{Either};
 use std::collections::{BTreeMap};
+use cddl::token::Value;
 
 use crate::intermediate::{
     AliasIdent,
@@ -346,12 +347,23 @@ fn group_entry_to_field_name(entry: &GroupEntry, index: usize, already_generated
     let field_name = convert_to_snake_case(&match entry {
         GroupEntry::ValueMemberKey{ ge, .. } => match ge.member_key.as_ref() {
             Some(member_key) => match member_key {
-                MemberKey::Value{ value, .. } => format!("key_{}", value),
+                MemberKey::Value{ value, .. } => {
+                    let value = match value {
+                        Value::INT(i) => format!("_{}", i),
+                        Value::UINT(u) =>  format!("_{}", u),
+                        Value::FLOAT(f) =>  format!("_{}", f),
+                        Value::TEXT(txt) => txt.to_string(),
+                        Value::BYTE(b) => b.to_string(),
+                    };
+
+                    value.replace(|c: char| c.is_ascii_alphanumeric(), "_")
+                },
                 MemberKey::Bareword{ ident, .. } => ident.to_string(),
                 MemberKey::Type1{ t1, .. } => match t1.type2 {
                     Type2::UintValue{ value, .. } => format!("key_{}", value),
                     _ => panic!("Encountered Type1 member key in multi-field map - not supported: {:?}", entry),
                 },
+                _ => unreachable!()
             },
             None => {
                 type_to_field_name(&ge.entry_type).unwrap_or_else(|| format!("index_{}", index))
@@ -547,6 +559,7 @@ fn group_entry_to_key(entry: &GroupEntry) -> Option<FixedValue> {
                     Type2::TextValue{ value, .. } => Some(FixedValue::Text(value.clone())),
                     _ => panic!("unsupported map identifier(2): {:?}", entry),
                 },
+                _ => unreachable!()
             }
         },
         _ => None,
@@ -614,7 +627,7 @@ pub fn parse_group(types: &mut IntermediateTypes, group: &Group, name: &RustIden
         // It would not be as trivial to add as we do the outer group's array/map tag writing inside the variant match
         // to avoid having to always generate SerializeEmbeddedGroup when not necessary.
         assert!(!types.is_plain_group(name));
-        
+
         // Handle group with choices by generating an enum then generating a group for every choice
         let mut variants_names_used = BTreeMap::<String, u32>::new();
         let variants: Vec<EnumVariant> = group.group_choices.iter().enumerate().map(|(i, group_choice)| {

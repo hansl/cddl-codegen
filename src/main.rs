@@ -4,6 +4,7 @@ pub (crate) mod intermediate;
 pub (crate) mod parsing;
 pub (crate) mod utils;
 
+use std::path::PathBuf;
 use generation::GenerationScope;
 use intermediate::{
     CDDLIdent,
@@ -12,10 +13,30 @@ use intermediate::{
 };
 use parsing::{parse_rule};
 
+use clap::Parser;
+
+#[derive(Parser)]
+struct Opts {
+    /// The path for CDDL input.
+    input: PathBuf,
+
+    /// The root directory for CDDL output. Must not exist.
+    output: PathBuf,
+
+    /// If true, will delete the output directory if it exists.
+    #[clap(long)]
+    force: bool
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cddl_in = std::fs::read_to_string("input.cddl").expect("input.cddl file not present or could not be opened");
-    let cddl = cddl::parser::cddl_from_str(&cddl_in)?;
+    let Opts { input, output, force } = Opts::parse();
+
+    if output.exists() && !force {
+        panic!("Output directory already exists.");
+    }
+
+    let cddl_in = std::fs::read_to_string(&input).expect("input.cddl file not present or could not be opened");
+    let cddl = cddl::parser::cddl_from_str(&cddl_in, true)?;
     let mut types = IntermediateTypes::new();
     let mut gen_scope = GenerationScope::new();
     // TODO: this is a quick hack to get around out-of-order declarations in the cddl file
@@ -38,6 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
     // TODO: handle out-of-order definition properly instead of just mandating at least two passes.
     // If we separate codegen and parsing this would probably be a lot easier too.
     // This is probably hiding some other issues too.
@@ -65,15 +87,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         types.finalize();
         gen_scope.generate(&types);
     }
-    match std::fs::remove_dir_all("export/src") {
-        Ok(()) => (),
-        Err(_) => (),
-    };
-    std::fs::create_dir_all("export/src").unwrap();
-    std::fs::write("export/src/lib.rs", gen_scope.scope().to_string()).unwrap();
-    std::fs::write("export/src/serialization.rs", gen_scope.serialize_scope().to_string()).unwrap();
-    std::fs::copy("static/Cargo.toml", "export/Cargo.toml").unwrap();
-    std::fs::copy("static/prelude.rs", "export/src/prelude.rs").unwrap();
+
+
+
+    let _ = std::fs::remove_dir_all(&output);
+    std::fs::create_dir_all(&output).unwrap();
+    std::fs::create_dir_all(&output.join("src")).unwrap();
+
+    std::fs::write(&output.join("src/lib.rs"), gen_scope.scope().to_string()).unwrap();
+    std::fs::write(&output.join("src/serialization.rs"), gen_scope.serialize_scope().to_string()).unwrap();
+
+    std::fs::write(&output.join("Cargo.toml"), include_bytes!("../static/Cargo.toml")).unwrap();
+    std::fs::write(&output.join("src/prelude.rs"), include_bytes!("../static/prelude.rs")).unwrap();
+    // std::fs::copy("static/Cargo.toml", &output.join("Cargo.toml")).unwrap();
+    // std::fs::copy("static/prelude.rs", &output.join("src/prelude.rs")).unwrap();
 
     types.print_info();
 

@@ -249,7 +249,7 @@ impl IntermediateTypes {
                 println!("{}", plain_group.0);
             }
         }
-    
+
         if !self.type_aliases.is_empty() {
             println!("\n\nAliases:");
             for (alias_name, alias_type) in self.type_aliases.iter() {
@@ -270,7 +270,7 @@ impl IntermediateTypes {
                 println!("{} -> {:?}", ident, def);
             }
         }
-    
+
         if !self.rust_structs.is_empty() {
             println!("\n\nRustStructs:");
             for (ident, rust_struct) in self.rust_structs.iter() {
@@ -287,7 +287,7 @@ impl IntermediateTypes {
         // easier to use instead of directly parsing
         if self.prelude_to_emit.insert(cddl_name.clone()) {
             let def = format!("prelude_{} = {}\n", cddl_name, cddl_prelude(&cddl_name).unwrap());
-            let cddl = cddl::parser::cddl_from_str(&def).unwrap();
+            let cddl = cddl::parser::cddl_from_str(&def, true).unwrap();
             assert_eq!(cddl.rules.len(), 1);
             crate::parsing::parse_rule(self, cddl.rules.first().unwrap());
         }
@@ -964,7 +964,7 @@ impl RustStruct {
     // The following methods are used internally to generate serialize/deserialize code
     // INSIDE of the serialize/deserialize implementations for this specific type.
     // You probably aren't interested in this from outside of that use-case.
-    
+
     // Some(count) if it always has the same number of fields (ie no optional fields), None otherwise
     pub fn fixed_field_count(&self, types: &IntermediateTypes) -> Option<usize> {
         match &self.variant {
@@ -1125,7 +1125,7 @@ impl GenericInstance {
     pub fn resolve(&self, types: &IntermediateTypes) -> RustStruct {
         let def = match types.generic_defs.get(&self.generic_ident) {
             Some(def) => def,
-            None => panic!(format!("Generic instance used on {} without definition", self.generic_ident)),
+            None => panic!("Generic instance used on {} without definition", self.generic_ident),
         };
         assert_eq!(def.generic_params.len(), self.generic_args.len());
         let resolved_args = def
@@ -1135,7 +1135,7 @@ impl GenericInstance {
             .collect::<BTreeMap::<&RustIdent, &RustType>>();
         let mut instance = def.orig.clone();
         instance.ident = self.instance_ident.clone();
-        
+
         match &mut instance.variant {
             RustStructType::Record(record) => {
                 for field in record.fields.iter_mut() {
